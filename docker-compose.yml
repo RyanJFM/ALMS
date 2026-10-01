@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: lms_mysql_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: lms_integrity_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: lms_django_backend
+    restart: always
+    command: >
+      sh -c "python manage.py makemigrations &&
+             python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_NAME=lms_integrity_db
+      - DB_USER=root
+      - DB_PASSWORD=rootpassword
+      - DB_HOST=db
+      - DB_PORT=3306
+      - SECRET_KEY=django-insecure-docker-secret-key
+      - DEBUG=True
+      - ALLOWED_HOSTS=127.0.0.1,localhost,backend
+      - CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: lms_react_frontend
+    restart: always
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
